@@ -1,0 +1,24 @@
+*.x
+*.o
+/.host
+/.vdate
+/y.tab.c
+/y.tab.h
+/mira
+/fdate
+/miralib/menudriver
+/miralib/preludx
+/mira.1.pdf
+/mira.man.pdf
+
+# Vendored Miranda build artifacts (do not commit)
+/miranda/*.o
+/miranda/*.x
+/miranda/y.tab.c
+/miranda/y.tab.h
+/miranda/mira
+/miranda/fdate
+/miranda/miralib/menudriver
+/miranda/miralib/preludx
+/miranda/mira.1.pdf
+/miranda/mira.man.pdf
