@@ -1,3 +1,12 @@
+add1 n = n+1
+
+fib 0 = 0
+fib 1 = 1
+fib n = fib (n-1) + fib (n-2)
+
+mr l = reverse l
+
+
 || American call option via binomial tree (Turner-style, correct comprehension)
 
 option_value spot duration strike sigma =
@@ -44,5 +53,5 @@ option_value spot duration strike sigma =
 
 
 main =
-  xoption_value 184.94 31 170 0.04
+  option_value 184.94 31 170 0.04
 

@@ -79,7 +79,6 @@ type appState struct {
 	symbolInfoScroll int
 	syntaxHL         *syntaxHighlighter
 	syntaxCheck      *goSyntaxChecker
-	gopls            *goplsClient
 	noGopls          bool
 	clipboard        editor.Clipboard
 	cmdPrefixActive  bool
@@ -145,6 +144,7 @@ var helpEntries = []helpEntry{
 	{"Buffer start / end", "Ctrl+Shift+A / Ctrl+Shift+E"},
 	{"Kill to EOL", "Ctrl+K"},
 	{"Copy / Cut / Paste", "Ctrl+C / Ctrl+X / Ctrl+V"},
+	{"Symbol info under cursor (Miranda)", "Esc+I"},
 	{"Cycle language mode", "Esc+M"},
 	{"Search mode", "Esc+/ then type pattern; / locks; Tab/Shift+Tab navigate; x enters line highlight mode"},
 	{"Line highlight mode", "Esc+X (or x from locked search), then x to extend by line; Esc exits"},
@@ -338,10 +338,7 @@ func saveAll(app *appState) error {
 var runFmtFix = goFmtAndFix
 var startGoRun = startGoRunProcess
 var completeGoCompletions = func(app *appState, path string, content string, line int, col int) ([]completionItem, error) {
-	if app == nil || app.gopls == nil {
-		return nil, fmt.Errorf("gopls unavailable")
-	}
-	return app.gopls.complete(path, content, line, col)
+	return nil, fmt.Errorf("completion backend disabled")
 }
 
 func formatFixReloadCurrent(app *appState) error {
@@ -1057,7 +1054,7 @@ func trySelectorCompletionPopup(app *appState, buf []rune, prefix string, start 
 		got, err := completeGoCompletions(app, app.currentPath, string(buf), line, col)
 		if err != nil {
 			app.noGopls = true
-			app.lastEvent = "Autocomplete disabled (gopls unavailable)"
+			app.lastEvent = "Autocomplete disabled"
 			return false
 		}
 		items = got
@@ -1206,6 +1203,15 @@ func importedPackageNames(src string) []string {
 
 func isSimpleIdentRune(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
+}
+
+func identPrefixStart(buf []rune, caret int) int {
+	caret = clamp(caret, 0, len(buf))
+	start := caret
+	for start > 0 && isSimpleIdentRune(buf[start-1]) {
+		start--
+	}
+	return start
 }
 
 func applyCompletionText(app *appState, prefixStart int, insertText string) {

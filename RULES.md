@@ -20,6 +20,7 @@ Mica (Miranda Cat) is a keyboard-centric editor inspired by the Canon Cat, Helix
 - **Esc command prefix**
   - `Esc` arms command mode.
   - `Esc+Esc` closes current buffer.
+  - `Esc+I` opens Miranda symbol info popup and shows symbol/function definitions when found.
   - `Esc+M` cycles forced language mode: `text -> markdown -> miranda -> text`.
   - `Esc+/` enters incremental search.
   - `Esc+X` enters line-highlight mode.

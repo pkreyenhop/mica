@@ -1,166 +1,91 @@
 package main
 
 import (
-	"fmt"
-	"sort"
 	"strings"
-	"sync"
+	"unicode"
 	"unicode/utf8"
-
-	treesitter "github.com/odvcencio/gotreesitter"
-	"github.com/odvcencio/gotreesitter/grammars"
 )
 
-type spanPriority struct {
-	style    tokenStyle
-	priority int
+var mirandaKeywords = map[string]struct{}{
+	"abstype": {}, "div": {}, "if": {}, "include": {}, "otherwise": {},
+	"readvals": {}, "show": {}, "type": {}, "where": {}, "with": {},
+	"mod": {}, "free": {}, "export": {}, "bnf": {}, "lex": {},
 }
 
-type tsLanguageSpec struct {
-	kind         syntaxKind
-	lang         *treesitter.Language
-	query        string
-	tokenFactory func([]byte, *treesitter.Language) treesitter.TokenSource
-
-	once        sync.Once
-	highlighter *treesitter.Highlighter
-	initErr     error
+var mirandaBuiltins = map[string]struct{}{
+	"hd": {}, "tl": {}, "map": {}, "filter": {}, "foldl": {}, "foldr": {},
+	"zip": {}, "zip2": {}, "take": {}, "drop": {}, "member": {}, "reverse": {},
 }
-
-var (
-	tsSpecsOnce       sync.Once
-	tsSpecs           map[syntaxKind]*tsLanguageSpec
-	captureStyleCache sync.Map
-)
 
 func (h *syntaxHighlighter) lineStyleForKind(path, src string, lines []string, kind syntaxKind) [][]tokenStyle {
-	if h == nil {
-		return nil
-	}
-	if kind == syntaxNone {
-		h.lastPath = path
-		h.lastSource = src
-		h.lastLines = len(lines)
-		h.lastKind = kind
-		h.lineStyles = nil
+	if h == nil || len(lines) == 0 || kind == syntaxNone {
 		return nil
 	}
 	if h.lastPath == path && h.lastSource == src && h.lastLines == len(lines) && h.lastKind == kind {
 		return h.lineStyles
 	}
 
-	tsSpecsOnce.Do(initTreeSitterSpecs)
-	spec := tsSpecs[kind]
-	lineStyles := buildTreeSitterLineStyles(spec, src, lines)
+	var out [][]tokenStyle
+	switch kind {
+	case syntaxMarkdown:
+		out = highlightMarkdownLines(lines)
+	case syntaxMiranda:
+		out = highlightMirandaLines(lines)
+	default:
+		out = nil
+	}
 
 	h.lastPath = path
 	h.lastSource = src
 	h.lastLines = len(lines)
 	h.lastKind = kind
-	h.lineStyles = lineStyles
-	return lineStyles
+	h.lineStyles = out
+	return out
 }
 
-func initTreeSitterSpecs() {
-	tsSpecs = map[syntaxKind]*tsLanguageSpec{}
-
-	mdEntry := grammars.DetectLanguage("x.md")
-	hsEntry := grammars.DetectLanguage("x.hs")
-
-	if mdEntry != nil {
-		query := strings.TrimSpace(mdEntry.HighlightQuery)
-		if query == "" {
-			query = markdownFallbackQuery
-		}
-		tsSpecs[syntaxMarkdown] = &tsLanguageSpec{
-			kind:         syntaxMarkdown,
-			lang:         mdEntry.Language(),
-			query:        query,
-			tokenFactory: mdEntry.TokenSourceFactory,
-		}
-	}
-	if hsEntry != nil {
-		tsSpecs[syntaxMiranda] = &tsLanguageSpec{
-			kind:         syntaxMiranda,
-			lang:         hsEntry.Language(),
-			query:        hsEntry.HighlightQuery,
-			tokenFactory: hsEntry.TokenSourceFactory,
-		}
-	}
-}
-
-func (s *tsLanguageSpec) highlighterForKind() (*treesitter.Highlighter, error) {
-	if s == nil || s.lang == nil {
-		return nil, fmt.Errorf("language unavailable")
-	}
-	s.once.Do(func() {
-		query := strings.TrimSpace(s.query)
-		if query == "" {
-			s.initErr = fmt.Errorf("highlight query unavailable")
-			return
-		}
-
-		opts := []treesitter.HighlighterOption{}
-		if s.tokenFactory != nil {
-			opts = append(opts, treesitter.WithTokenSourceFactory(func(source []byte) treesitter.TokenSource {
-				return s.tokenFactory(source, s.lang)
-			}))
-		}
-
-		hl, err := treesitter.NewHighlighter(s.lang, query, opts...)
-		if err != nil && s.kind == syntaxMarkdown {
-			hl, err = treesitter.NewHighlighter(s.lang, "(_) @punctuation", opts...)
-		}
-		s.highlighter = hl
-		s.initErr = err
-	})
-	return s.highlighter, s.initErr
-}
-
-func buildTreeSitterLineStyles(spec *tsLanguageSpec, src string, lines []string) [][]tokenStyle {
-	if spec == nil || len(lines) == 0 {
-		return nil
-	}
-	hl, err := spec.highlighterForKind()
-	if err != nil || hl == nil {
-		return nil
-	}
-
-	ranges := hl.Highlight([]byte(src))
-	if len(ranges) == 0 {
-		return nil
-	}
-
-	styleGrid := make([][]spanPriority, len(lines))
-	for i, line := range lines {
-		styleGrid[i] = make([]spanPriority, utf8.RuneCountInString(line))
-	}
-
-	lineStartBytes := computeLineStartBytes(src, len(lines))
-	for _, r := range ranges {
-		style, pri := styleFromCapture(r.Capture)
-		if style == styleDefault {
-			continue
-		}
-		applyByteStyle(styleGrid, lines, lineStartBytes, int(r.StartByte), int(r.EndByte), style, pri)
-	}
-
+func highlightMarkdownLines(lines []string) [][]tokenStyle {
 	out := make([][]tokenStyle, len(lines))
 	hasAny := false
-	for i, row := range styleGrid {
-		hasStyle := false
-		for _, cell := range row {
-			if cell.style != styleDefault {
-				hasStyle = true
+	for i, line := range lines {
+		rs := []rune(line)
+		if len(rs) == 0 {
+			continue
+		}
+		styles := make([]tokenStyle, len(rs))
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "#") {
+			for j := range styles {
+				styles[j] = styleHeading
+			}
+			hasAny = true
+			out[i] = styles
+			continue
+		}
+		for j := 0; j < len(rs); j++ {
+			if rs[j] == '`' {
+				k := j + 1
+				for k < len(rs) && rs[k] != '`' {
+					styles[k] = styleString
+					k++
+				}
 				hasAny = true
-				break
+				j = k
+				continue
+			}
+			if rs[j] == '[' {
+				k := j
+				for k < len(rs) && rs[k] != ')' {
+					styles[k] = styleLink
+					k++
+				}
+				if k < len(rs) {
+					styles[k] = styleLink
+				}
+				hasAny = true
+				j = k
 			}
 		}
-		if hasStyle {
-			styles := make([]tokenStyle, len(row))
-			for j, cell := range row {
-				styles[j] = cell.style
-			}
+		if rowHasStyle(styles) {
 			out[i] = styles
 		}
 	}
@@ -170,164 +95,133 @@ func buildTreeSitterLineStyles(spec *tsLanguageSpec, src string, lines []string)
 	return out
 }
 
-func styleFromCapture(capture string) (tokenStyle, int) {
-	if v, ok := captureStyleCache.Load(capture); ok {
-		sp := v.(spanPriority)
-		return sp.style, sp.priority
-	}
-	name := strings.ToLower(capture)
-	sp := spanPriority{}
-	switch {
-	case strings.Contains(name, "comment"):
-		sp = spanPriority{style: styleComment, priority: 90}
-	case strings.Contains(name, "string"), strings.Contains(name, "character"), strings.Contains(name, "escape"):
-		sp = spanPriority{style: styleString, priority: 80}
-	case strings.Contains(name, "number"), strings.Contains(name, "float"), strings.Contains(name, "integer"):
-		sp = spanPriority{style: styleNumber, priority: 70}
-	case strings.Contains(name, "function"), strings.Contains(name, "method"):
-		sp = spanPriority{style: styleFunction, priority: 65}
-	case strings.Contains(name, "type"), strings.Contains(name, "constructor"):
-		sp = spanPriority{style: styleType, priority: 60}
-	case strings.Contains(name, "heading"), strings.Contains(name, "title"):
-		sp = spanPriority{style: styleHeading, priority: 70}
-	case strings.Contains(name, "link"), strings.Contains(name, "url"), strings.Contains(name, "uri"):
-		sp = spanPriority{style: styleLink, priority: 70}
-	case strings.Contains(name, "keyword"), strings.Contains(name, "conditional"), strings.Contains(name, "repeat"), strings.Contains(name, "exception"):
-		sp = spanPriority{style: styleKeyword, priority: 60}
-	case strings.Contains(name, "operator"), strings.Contains(name, "punctuation"), strings.Contains(name, "delimiter"), strings.Contains(name, "bracket"):
-		sp = spanPriority{style: stylePunctuation, priority: 55}
-	}
-	captureStyleCache.Store(capture, sp)
-	return sp.style, sp.priority
-}
-
-func computeLineStartBytes(src string, lineCount int) []int {
-	starts := make([]int, 0, lineCount)
-	starts = append(starts, 0)
-	for i := 0; i < len(src); i++ {
-		if src[i] == '\n' {
-			starts = append(starts, i+1)
-		}
-	}
-	if len(starts) > lineCount {
-		return starts[:lineCount]
-	}
-	for len(starts) < lineCount {
-		starts = append(starts, len(src))
-	}
-	return starts
-}
-
-func applyByteStyle(
-	styleGrid [][]spanPriority,
-	lines []string,
-	lineStarts []int,
-	startByte int,
-	endByte int,
-	style tokenStyle,
-	priority int,
-) {
-	if len(styleGrid) == 0 || endByte <= startByte {
-		return
-	}
-	startLine, startColByte := byteOffsetToLineCol(lineStarts, startByte)
-	endLine, endColByte := byteOffsetToLineCol(lineStarts, endByte)
-	if startLine >= len(styleGrid) || endLine < 0 {
-		return
-	}
-	if startLine < 0 {
-		startLine = 0
-	}
-	if endLine >= len(styleGrid) {
-		endLine = len(styleGrid) - 1
-	}
-
-	for ln := startLine; ln <= endLine; ln++ {
-		if ln < 0 || ln >= len(lines) {
+func highlightMirandaLines(lines []string) [][]tokenStyle {
+	out := make([][]tokenStyle, len(lines))
+	hasAny := false
+	for i, line := range lines {
+		rs := []rune(line)
+		if len(rs) == 0 {
 			continue
 		}
-		line := lines[ln]
-		lineBytes := len(line)
-		segStartByte := 0
-		segEndByte := lineBytes
-		if ln == startLine {
-			segStartByte = min(startColByte, lineBytes)
-		}
-		if ln == endLine {
-			segEndByte = min(endColByte, lineBytes)
-		}
-		if segEndByte <= segStartByte {
-			continue
-		}
-		startColRune := utf8.RuneCountInString(line[:segStartByte])
-		endColRune := utf8.RuneCountInString(line[:segEndByte])
-		row := styleGrid[ln]
-		if endColRune > len(row) {
-			endColRune = len(row)
-		}
-		for i := max(startColRune, 0); i < endColRune; i++ {
-			if priority >= row[i].priority {
-				row[i] = spanPriority{style: style, priority: priority}
+		styles := make([]tokenStyle, len(rs))
+
+		for j := 0; j < len(rs); {
+			if j+1 < len(rs) && rs[j] == '|' && rs[j+1] == '|' {
+				for k := j; k < len(rs); k++ {
+					styles[k] = styleComment
+				}
+				hasAny = true
+				break
 			}
+			if rs[j] == '"' {
+				styles[j] = styleString
+				k := j + 1
+				for k < len(rs) {
+					styles[k] = styleString
+					if rs[k] == '"' && rs[k-1] != '\\' {
+						k++
+						break
+					}
+					k++
+				}
+				hasAny = true
+				j = k
+				continue
+			}
+			if rs[j] == '\'' {
+				styles[j] = styleString
+				k := j + 1
+				for k < len(rs) {
+					styles[k] = styleString
+					if rs[k] == '\'' && rs[k-1] != '\\' {
+						k++
+						break
+					}
+					k++
+				}
+				hasAny = true
+				j = k
+				continue
+			}
+			if unicode.IsDigit(rs[j]) {
+				k := j + 1
+				for k < len(rs) && (unicode.IsDigit(rs[k]) || rs[k] == '.') {
+					k++
+				}
+				for x := j; x < k; x++ {
+					styles[x] = styleNumber
+				}
+				hasAny = true
+				j = k
+				continue
+			}
+			if isMirandaIdentStart(rs[j]) {
+				k := j + 1
+				for k < len(rs) && isMirandaIdentRune(rs[k]) {
+					k++
+				}
+				ident := string(rs[j:k])
+				identLower := strings.ToLower(ident)
+				style := styleDefault
+				if _, ok := mirandaKeywords[identLower]; ok {
+					style = styleKeyword
+				} else if _, ok := mirandaBuiltins[identLower]; ok {
+					style = styleFunction
+				} else if unicode.IsUpper(rs[j]) {
+					style = styleType
+				}
+				if style != styleDefault {
+					for x := j; x < k; x++ {
+						styles[x] = style
+					}
+					hasAny = true
+				}
+				j = k
+				continue
+			}
+			if isMirandaPunctuation(rs[j]) {
+				styles[j] = stylePunctuation
+				hasAny = true
+			}
+			j++
+		}
+		if rowHasStyle(styles) {
+			out[i] = styles
 		}
 	}
+	if !hasAny {
+		return nil
+	}
+	return out
 }
 
-func byteOffsetToLineCol(lineStarts []int, off int) (line int, col int) {
-	if len(lineStarts) == 0 {
-		return 0, 0
-	}
-	if off <= 0 {
-		return 0, 0
-	}
-	lastStart := lineStarts[len(lineStarts)-1]
-	if off >= lastStart {
-		return len(lineStarts) - 1, off - lastStart
-	}
-	i := sort.Search(len(lineStarts), func(i int) bool {
-		return lineStarts[i] > off
-	})
-	line = max(i-1, 0)
-	col = max(off-lineStarts[line], 0)
-	return line, col
+func isMirandaIdentStart(r rune) bool {
+	return unicode.IsLetter(r) || r == '_'
 }
 
-const markdownFallbackQuery = `
-[
-  (atx_heading)
-  (setext_heading)
-  (atx_h1_marker)
-  (atx_h2_marker)
-  (atx_h3_marker)
-  (atx_h4_marker)
-  (atx_h5_marker)
-  (atx_h6_marker)
-] @heading
+func isMirandaIdentRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '\''
+}
 
-[
-  (link_label)
-  (link_destination)
-  (link_title)
-  (link_reference_definition)
-] @link
+func isMirandaPunctuation(r rune) bool {
+	return strings.ContainsRune("=:+-*/<>|&!.,()[]{}\\", r)
+}
 
-[
-  (fenced_code_block)
-  (code_fence_content)
-  (fenced_code_block_delimiter)
-  (indented_code_block)
-  (info_string)
-] @string
+func rowHasStyle(row []tokenStyle) bool {
+	for _, s := range row {
+		if s != styleDefault {
+			return true
+		}
+	}
+	return false
+}
 
-[
-  (thematic_break)
-  (block_quote_marker)
-  (list_marker_plus)
-  (list_marker_minus)
-  (list_marker_star)
-  (list_marker_dot)
-  (list_marker_parenthesis)
-] @punctuation
-
-(html_block) @comment
-`
+func runeColFromByte(s string, b int) int {
+	if b <= 0 {
+		return 0
+	}
+	if b >= len(s) {
+		return utf8.RuneCountInString(s)
+	}
+	return utf8.RuneCountInString(s[:b])
+}

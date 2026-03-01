@@ -4,7 +4,6 @@ go 1.26
 
 require (
 	github.com/gdamore/tcell/v2 v2.13.8
-	github.com/odvcencio/gotreesitter v0.5.2
 )
 
 require (

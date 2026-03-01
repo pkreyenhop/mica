@@ -45,6 +45,7 @@ go build -o mica .
 - `Esc+Shift+S`: save dirty buffers
 - `Esc+Shift+Q`: quit all
 - `Esc+M`: cycle forced language mode (`text -> markdown -> miranda -> text`)
+- `Esc+I`: open Miranda symbol info popup with definition lookup (current buffer first, then vendored stdlib)
 - `Esc+/`: search mode
 - `Esc+X`: line-highlight mode
 - `Esc+Space`: less mode

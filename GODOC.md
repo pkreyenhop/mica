@@ -16,13 +16,14 @@ package main // import "."
 ### Runtime Modes (TUI)
 
 - `Esc` command-prefix mode with delayed lower-right helper popup.
+- `Esc+I` symbol info popup for Miranda symbols and function definitions.
 - `Esc+/` incremental search mode (`/` lock, `Tab`/`Shift+Tab` navigation).
 - `Esc+X` line-highlight mode (`x` extends selection, `Esc` exits).
 - `Esc+Space` less mode (`Space` page, `Esc` exit).
 
 ### Syntax Highlighting
 
-- Syntax highlighting uses pure-Go Tree-sitter (`github.com/odvcencio/gotreesitter`).
+- Syntax highlighting uses built-in lexical tokenizers (no LSP/Tree-sitter dependency).
 - Active syntax kinds: text (default), markdown, miranda.
 
 ## `mica/editor`

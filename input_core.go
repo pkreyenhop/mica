@@ -97,6 +97,14 @@ func handleKeyEvent(app *appState, e keyEvent) bool {
 	app.lastMods = e.mods
 	prefixed := false
 
+	if e.down && e.repeat == 0 && e.key == keyEscape && strings.TrimSpace(app.symbolInfoPopup) != "" {
+		app.symbolInfoPopup = ""
+		app.symbolInfoScroll = 0
+		app.cmdPrefixActive = false
+		app.lastEvent = "Closed symbol info"
+		return true
+	}
+
 	if e.down && e.repeat == 0 && app.cmdPrefixActive {
 		app.cmdPrefixActive = false
 		app.escHelpVisible = false
@@ -235,6 +243,29 @@ func handleKeyEvent(app *appState, e keyEvent) bool {
 		fmt.Println(app.lastEvent)
 	}
 
+	if e.down && app.symbolInfoPopup != "" {
+		switch e.key {
+		case keyUp:
+			app.symbolInfoScroll = max(0, app.symbolInfoScroll-1)
+			return true
+		case keyDown:
+			app.symbolInfoScroll++
+			return true
+		case keyPageUp:
+			app.symbolInfoScroll = max(0, app.symbolInfoScroll-6)
+			return true
+		case keyPageDown:
+			app.symbolInfoScroll += 6
+			return true
+		case keyHome:
+			app.symbolInfoScroll = 0
+			return true
+		case keyEnd:
+			app.symbolInfoScroll = 1 << 20
+			return true
+		}
+	}
+
 	if e.down && e.repeat == 0 {
 		if e.key == keyTab && !ed.Leap.Active {
 			if (e.mods&modShift) != 0 && (e.mods&modCtrl) == 0 {
@@ -329,7 +360,17 @@ func handleKeyEvent(app *appState, e keyEvent) bool {
 				app.markDirty()
 				return true
 			case keyI:
-				app.lastEvent = "Esc+I disabled"
+				if !prefixed {
+					app.lastEvent = "Use Esc+I for symbol info"
+					return true
+				}
+				if strings.TrimSpace(app.symbolInfoPopup) != "" {
+					app.symbolInfoPopup = ""
+					app.symbolInfoScroll = 0
+				} else {
+					app.symbolInfoPopup = showSymbolInfo(app)
+					app.symbolInfoScroll = 0
+				}
 				return true
 			case keyM:
 				if !prefixed {

@@ -480,6 +480,9 @@ func drawTUI(s tcell.Screen, app *appState) {
 	}
 	drawCellText(s, 0, h-1, padRight(input, w), inputStyle)
 
+	if strings.TrimSpace(app.symbolInfoPopup) != "" {
+		drawTUISymbolPopup(s, app, w, h)
+	}
 	if app.escHelpVisible {
 		drawTUIEscHelpPopup(s, w, h)
 	}
@@ -513,6 +516,7 @@ var escHelpCategories = []escShortcutCategory{
 			"/  search mode",
 			"x  line highlight mode",
 			"m  cycle language mode",
+			"i  symbol info popup",
 		},
 	},
 	{

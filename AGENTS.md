@@ -24,7 +24,7 @@
 - Use `[]rune` for buffer text.
 - Prefer editor accessors (`Runes`, `String`, `RuneLen`, `SetRunes`) over direct storage mutation.
 - Keep `helpEntries`, README, and RULES aligned.
-- Esc-prefixed command shortcuts include `Esc+M` for mode cycle (`text/markdown/miranda`) and `Esc+Shift+Delete` for buffer clear.
+- Esc-prefixed command shortcuts include `Esc+I` for Miranda symbol-definition popup, `Esc+M` for mode cycle (`text/markdown/miranda`), and `Esc+Shift+Delete` for buffer clear.
 
 ## Testing Guidelines
 - Prefer scenario-style behavior tests.

@@ -34,6 +34,8 @@ type syntaxHighlighter struct {
 }
 
 func newGoHighlighter() *syntaxHighlighter {
+	// Historical constructor name kept to avoid broad call-site churn.
+	// The implementation now uses built-in lexical highlighters (no LSP/Tree-sitter).
 	return &syntaxHighlighter{}
 }
 

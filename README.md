@@ -23,6 +23,7 @@ go build -o mica .
 - `Esc+Shift+Q`: quit all
 - `Esc+Esc`: close current buffer (prefix mode)
 - `Esc+M`: cycle forced language mode (`text -> markdown -> miranda -> text`)
+- `Esc+I`: Miranda symbol info popup (shows function definitions from current buffer or vendored stdlib when available)
 - `Esc+/`: incremental search (`/` lock, `Tab` next, `Shift+Tab` previous)
 - `Esc+X`: line-highlight mode (`x` extends)
 - `Esc+Space`: less mode (`Space` page, `Esc` exit)
