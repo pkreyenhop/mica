@@ -1,45 +1,39 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Identity: the editor is called "mica" (for Miranda Cat) and draws inspiration from the Canon Cat, Helix, acme, AMP, and Emacs; keep README and RULES aligned with that positioning.
-- `main_tui.go` — Go TUI frontend (tcell): screen setup, event loop, terminal rendering, and key dispatch into the controller.
-- `main.go` — shared app state and non-UI editor/file helpers used by the TUI and tests.
-- `input_core.go` — platform-agnostic input/controller layer (`keyEvent`, `modMask`, text/open/input handlers).
-- `lsp_gopls.go` — minimal JSON-RPC client for `gopls` completion/hover requests, snippet sanitization, and completion-doc extraction.
-- `editor/` — UI-free core: buffer management, leap/search, selection, clipboard abstraction, and helpers for line/column math.
-- `editor/editor_logic_test.go` — behaviour-focused tests using a small fixture DSL.
+- Identity: the editor is called `mica` (Miranda Cat) and draws inspiration from the Canon Cat, Helix, acme, AMP, and Emacs.
+- `main_tui.go` — TUI frontend (tcell): screen setup, event loop, rendering, and key dispatch.
+- `main.go` — shared app state and non-UI helpers.
+- `input_core.go` — platform-agnostic input/controller layer.
+- `editor/` — UI-free core: buffer management, leap/search, selection, clipboard abstraction.
 - Root tests: `main_open_test.go`, `main_buffer_test.go`, `main_scroll_test.go`, `main_syntax_test.go`, `main_tui_test.go`, `main_help_test.go`.
-- `RULES.md` — canonical list of implemented behaviours; keep in sync when changing shortcuts or UI flows.
-- `README.md` — user-facing overview/shortcuts; must stay consistent with help entries and RULES.
-- `miranda/` — vendored Miranda runtime/source tree; treat as part of this repo (not a submodule) and keep any C/source changes in `mica`.
+- `RULES.md` — canonical behavior list.
+- `README.md` — user-facing overview.
+- `miranda/` — vendored Miranda runtime/source tree; treat as part of `mica` (not a submodule).
 
 ## Build, Test, and Development Commands
 - `go run .` — launch the TUI editor.
-- `go build .` — compile the TUI binary.
-- `go test ./editor` — run headless logic tests only.
-- `go test ./...` — full test/build for TUI + headless editor logic.
+- `go build .` — compile the editor.
+- `go test ./editor` — run headless logic tests.
+- `go test ./...` — run full tests.
 
 ## Coding Style & Naming Conventions
-- Run `gofmt` before sending changes; default Go tabs/formatting.
-- Keep logic UI-agnostic inside `editor/`; prefer injecting dependencies (e.g., clipboard) rather than reaching into TUI implementation details.
-- Naming: directions as `DirFwd`/`DirBack`, caret/selection fields as `Caret`, `Sel`, `Leap`.
-- Use `[]rune` for buffer text to preserve Unicode indexing.
-- Editor text storage is gap-buffer-backed; prefer editor APIs (`Runes`, `String`, `RuneLen`, `SetRunes`) instead of direct field access.
-- Buffers are tracked via `app.buffers`/`bufIdx`; keep UI-facing shortcuts and help text (`helpEntries`) in sync with README/RULES.
-- Esc-prefixed command shortcuts include `Esc+M` for cycling forced buffer language mode (`text/go/markdown/c/miranda`), which affects highlighting and Go-only tooling behavior in untitled buffers.
-- Esc-prefixed destructive edit includes `Esc+Shift+Delete`, which clears the active buffer contents and marks it dirty.
-- Go completion uses `Tab`: unique keyword/import-prefix expansions apply directly; selector completion (`pkg.`) opens a chooser popup with a delayed upper-right details popup.
+- Run `gofmt` before sending changes.
+- Keep core logic UI-agnostic inside `editor/`.
+- Naming: directions as `DirFwd`/`DirBack`; caret/selection fields as `Caret`, `Sel`, `Leap`.
+- Use `[]rune` for buffer text.
+- Prefer editor accessors (`Runes`, `String`, `RuneLen`, `SetRunes`) over direct storage mutation.
+- Keep `helpEntries`, README, and RULES aligned.
+- Esc-prefixed command shortcuts include `Esc+M` for mode cycle (`text/markdown/miranda`) and `Esc+Shift+Delete` for buffer clear.
 
 ## Testing Guidelines
-- Prefer scenario-style tests that describe behaviour.
-- Keep tests deterministic and headless; avoid external UI/system dependencies.
-- Add TUI key-flow checks in `main_tui_test.go` and core command-mode checks in `input_core_test.go`.
-- Keep README/help sync via `main_help_test.go`.
+- Prefer scenario-style behavior tests.
+- Keep tests deterministic and headless.
+- Add key-flow checks in `main_tui_test.go` and command-mode checks in `input_core_test.go`.
 
 ## Commit & Pull Request Guidelines
-- Commit messages should be present-tense and imperative (e.g., "Add wrap-around leap test").
-- Mention key behaviours and commands run (`go test ./editor` or `go test ./...`).
-- Run `go fix ./...` before committing when changes touch Go code.
+- Commit messages should be imperative and present tense.
+- Mention key behaviors changed and commands run (`go test ./...`).
 
 ## Environment & Configuration Notes
 - Go 1.26+ per `go.mod`.

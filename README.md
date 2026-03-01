@@ -1,55 +1,57 @@
-# Maintenance of Miranda
+# Mica
 
-The Miranda source code is now maintained on `codeberg.org/DATurner/miranda`
+Mica (Miranda Cat) is a terminal-first text editor with Canon Cat inspired navigation, fast buffer workflows, and a headless editing core.
 
-This is particularly relevant because the last binary release
-on miranda.org.uk was of mira 2.042 in Sep 2008 and since then
-Professor Turner only released it in source code form, of which
-his latest is 2.066 from Jan 2020, but those releases do not compile
-out of the box.
+## Build and Run
 
-To build it from source, you need `make` and a C compiler.
-If you need to modify `rules.y` you'll also need `byacc`;
-it does not work at all with the supposedly compatible GNU `bison`.
-
-It is known to work on
-aarch, amd, arm, chrp, evbarm, loongarch, mips, powerpc, riscv and x86,
-on 32-bit and 64-bit, big-endian and little-endian systems running
-AIX, AlmaLinux, AlpineLinux, Archlinux, CentOS, Debian, FreeBSD, Haiku,
-MacOS X, NetBSD, OpenBSD, OpenSUSE and Rocky with all versions of
-GCC from 2.95 to 14 and clang 11 to 16 with no optimization enabled and
-some versions of gcc and clang up to `-O3`. The 64-bit version has been
-tested with up to 2TB of RAM for the heap, over 100,000,000,000 cells.
-
-You can see whether optimization will work for you in the table "Compilers"
-in https://codeberg.org/DATurner/miranda/issues/25 
-
-It compiles but does not work on Solaris with a sun4u processor
-and a Windows port has not yet been attempted.
-
-A release will be made on Codeberg when further portability
-and testing are complete, currently scheduled for 1st May 2025.
-
-In the meantime, you can
-
-```
-git clone https://codeberg.org/DATurner/miranda
-cd miranda
-make
-make install
+```sh
+go build -o mica .
+./mica [file1 file2 ...]
 ```
 
-which puts it in `/usr/bin/mira` and `/usr/lib/miralib`.
-To install it elsewhere or use a different compiler than GCC,
-edit `Makefile` before building.
+- Missing startup files open as empty buffers and are created on first save.
+- `Shift+Tab` cycles buffers.
 
-You can also test it in the source directory before installing it
-by running it as `./mira`
+## Core Shortcuts
 
-There is a mailing list `miranda@groups.io` whose web site is
-`http://groups.io/g/miranda` and you can also subscribe to it
-by sending an email to `miranda+subscribe@groups.io`
+- `Ctrl+B`: new buffer
+- `Ctrl+O`: open file picker buffer
+- `Ctrl+L`: open file/directory under caret in picker
+- `Esc+W`: write/save-as prompt
+- `Esc+Shift+S`: save dirty buffers
+- `Ctrl+Q`: close current buffer
+- `Esc+Shift+Q`: quit all
+- `Esc+Esc`: close current buffer (prefix mode)
+- `Esc+M`: cycle forced language mode (`text -> markdown -> miranda -> text`)
+- `Esc+/`: incremental search (`/` lock, `Tab` next, `Shift+Tab` previous)
+- `Esc+X`: line-highlight mode (`x` extends)
+- `Esc+Space`: less mode (`Space` page, `Esc` exit)
+- `Esc+Shift+Delete`: clear active buffer contents
+- `Ctrl+/`: toggle line comments on selection/current line
+- `Ctrl+A`/`Ctrl+E`: line start/end
+- `Ctrl+Shift+A`/`Ctrl+Shift+E`: buffer start/end
+- `Ctrl+,` / `Ctrl+.`: page up/down
+- `Ctrl+K`: kill to end of line
+- `Ctrl+U`: undo
+- `Ctrl+C` / `Ctrl+X` / `Ctrl+V`: copy/cut/paste
 
-His earlier language, KRC, is maintained at `codeberg.org/DATurner/KRC`
+## Syntax Modes
 
-    Martin Guy <martinwguy@gmail.com>, April 2025.
+- Auto-detect supports Markdown (`.md`, `.markdown`) and Miranda (`.m`).
+- Plain text is the default.
+- `Esc+M` sets a forced mode per buffer.
+
+## Project Layout
+
+- `main_tui.go`: tcell frontend loop and terminal rendering.
+- `main.go`: shared app state and non-UI helpers.
+- `input_core.go`: platform-neutral key/text command handling.
+- `editor/`: headless editing core (gap-buffer-backed storage).
+- `miranda/`: vendored Miranda runtime/source tree tracked in this repository.
+
+## Tests
+
+```sh
+go test ./editor
+go test ./...
+```

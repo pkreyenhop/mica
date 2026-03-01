@@ -151,7 +151,7 @@ var helpEntries = []helpEntry{
 	{"Less mode", "Esc+Space (Space page, Esc exit)"},
 	{"Navigation", "Arrows, PageUp/Down, Ctrl+, Ctrl+. (Shift = select)"},
 	{"Delete buffer contents", "Esc+Shift+Delete"},
-	{"Escape", "Closes symbol info popup or exits less mode; otherwise command prefix (Esc then Esc closes current buffer)"},
+	{"Escape", "Exits less mode; otherwise command prefix (Esc then Esc closes current buffer)"},
 	{"Help buffer", "Ctrl+Shift+/ (Ctrl+?)"},
 }
 
