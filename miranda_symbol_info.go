@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -91,9 +92,13 @@ func mirandaDefinitionFromCurrentBuffer(app *appState, symbol string) (string, [
 }
 
 func mirandaDefinitionFromStdlib(symbol string) (string, []string, bool) {
+	base, ok := findVendoredMirandaDir()
+	if !ok {
+		return "", nil, false
+	}
 	files := []string{
-		filepath.Join("miranda", "miralib", "stdenv.m"),
-		filepath.Join("miranda", "miralib", "prelude"),
+		filepath.Join(base, "miralib", "stdenv.m"),
+		filepath.Join(base, "miralib", "prelude"),
 	}
 	for _, p := range files {
 		runes, err := readFileRunes(p)
@@ -252,14 +257,17 @@ func appendMirandaHelpNotes(b *strings.Builder, symbol string) {
 	if b == nil {
 		return
 	}
-	notes := mirandaHelpMatches(symbol, 3)
+	notes := mirandaHelpMatches(symbol, 2)
 	if len(notes) == 0 {
 		return
 	}
 	b.WriteString("\nHelp notes:\n")
 	for _, h := range notes {
-		b.WriteString("  ")
-		b.WriteString(h)
+		for _, ln := range strings.Split(h, "\n") {
+			b.WriteString("  ")
+			b.WriteString(strings.TrimRight(ln, "\r"))
+			b.WriteRune('\n')
+		}
 		b.WriteRune('\n')
 	}
 }
@@ -268,11 +276,16 @@ func mirandaHelpMatches(symbol string, max int) []string {
 	if strings.TrimSpace(symbol) == "" || max <= 0 {
 		return nil
 	}
+	base, ok := findVendoredMirandaDir()
+	if !ok {
+		return nil
+	}
 	needle := strings.ToLower(symbol)
 	files := []string{
-		filepath.Join("miranda", "miralib", "helpfile"),
-		filepath.Join("miranda", "README"),
-		filepath.Join("miranda", "rules.y"),
+		filepath.Join(base, "miralib", "stdenv.m"),
+		filepath.Join(base, "miralib", "helpfile"),
+		filepath.Join(base, "README"),
+		filepath.Join(base, "rules.y"),
 	}
 	out := make([]string, 0, max)
 	seen := map[string]struct{}{}
@@ -282,23 +295,76 @@ func mirandaHelpMatches(symbol string, max int) []string {
 			continue
 		}
 		lines := strings.Split(string(runes), "\n")
-		for _, raw := range lines {
-			line := strings.TrimSpace(raw)
+		for i := 0; i < len(lines); i++ {
+			line := strings.TrimSpace(lines[i])
 			if line == "" || !strings.Contains(strings.ToLower(line), needle) {
 				continue
 			}
-			if len(line) > 120 {
-				line = line[:120] + "..."
+
+			start := i
+			for start > 0 && strings.TrimSpace(lines[start-1]) != "" {
+				start--
 			}
-			if _, ok := seen[line]; ok {
+			end := i
+			for end+1 < len(lines) && strings.TrimSpace(lines[end+1]) != "" {
+				end++
+			}
+
+			blockLines := make([]string, 0, end-start+2)
+			blockLines = append(blockLines, filepath.Base(p)+":")
+			for j := start; j <= end; j++ {
+				blockLines = append(blockLines, strings.TrimSpace(lines[j]))
+			}
+			block := strings.Join(blockLines, "\n")
+			if _, ok := seen[block]; ok {
 				continue
 			}
-			seen[line] = struct{}{}
-			out = append(out, line)
+			seen[block] = struct{}{}
+			out = append(out, block)
 			if len(out) >= max {
 				return out
 			}
 		}
 	}
 	return out
+}
+
+func findVendoredMirandaDir() (string, bool) {
+	isMirandaDir := func(dir string) bool {
+		_, err1 := os.Stat(filepath.Join(dir, "miralib", "stdenv.m"))
+		_, err2 := os.Stat(filepath.Join(dir, "miralib", "prelude"))
+		return err1 == nil && err2 == nil
+	}
+	searchUp := func(start string) (string, bool) {
+		if strings.TrimSpace(start) == "" {
+			return "", false
+		}
+		cur := start
+		for {
+			if isMirandaDir(filepath.Join(cur, "miranda")) {
+				return filepath.Join(cur, "miranda"), true
+			}
+			if isMirandaDir(cur) {
+				return cur, true
+			}
+			next := filepath.Dir(cur)
+			if next == cur {
+				break
+			}
+			cur = next
+		}
+		return "", false
+	}
+
+	if cwd, err := os.Getwd(); err == nil {
+		if p, ok := searchUp(cwd); ok {
+			return p, true
+		}
+	}
+	if exe, err := os.Executable(); err == nil {
+		if p, ok := searchUp(filepath.Dir(exe)); ok {
+			return p, true
+		}
+	}
+	return "", false
 }

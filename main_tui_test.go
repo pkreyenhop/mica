@@ -47,20 +47,20 @@ func TestHandleTUIEscPrefixCreatesBuffer(t *testing.T) {
 	}
 }
 
-func TestRenderDataTreatsGoPathAsTextWhenUnforced(t *testing.T) {
-	app := appState{syntaxHL: newGoHighlighter()}
+func TestRenderDataTreatsPathAsMirandaWhenUnforced(t *testing.T) {
+	app := appState{syntaxHL: newMirandaHighlighter()}
 	app.initBuffers(editor.NewEditor("package main\n"))
 	app.currentPath = "p.go"
 	app.buffers[0].path = "p.go"
 
 	_, _, lang, _ := renderData(&app)
-	if lang != "text" {
-		t.Fatalf("lang=%q, want text", lang)
+	if lang != "miranda" {
+		t.Fatalf("lang=%q, want miranda", lang)
 	}
 }
 
 func TestRenderDataRespectsForcedMarkdownMode(t *testing.T) {
-	app := appState{syntaxHL: newGoHighlighter()}
+	app := appState{syntaxHL: newMirandaHighlighter()}
 	app.initBuffers(editor.NewEditor("plain text\n"))
 	app.currentPath = "notes.txt"
 	app.buffers[0].path = "notes.txt"
@@ -80,7 +80,7 @@ func TestDrawTUIDoesNotPanic(t *testing.T) {
 	defer s.Fini()
 	s.SetSize(80, 24)
 
-	app := appState{syntaxHL: newGoHighlighter()}
+	app := appState{syntaxHL: newMirandaHighlighter()}
 	app.initBuffers(editor.NewEditor("hello\nworld\n"))
 	drawTUI(s, &app)
 }

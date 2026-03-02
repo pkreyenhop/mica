@@ -274,7 +274,9 @@ func handleKeyEvent(app *appState, e keyEvent) bool {
 				return true
 			}
 			if tryManualCompletion(app) {
-				app.lastEvent = "Completed"
+				if !app.completionPopup.active {
+					app.lastEvent = "Completed"
+				}
 			}
 			return true
 		}

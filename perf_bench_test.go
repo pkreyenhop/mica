@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -68,43 +67,22 @@ func BenchmarkOpenPathLargeFile(b *testing.B) {
 	}
 }
 
-func BenchmarkActiveBufferSyntaxErrorsCache(b *testing.B) {
+func BenchmarkMirandaCompletionItems(b *testing.B) {
 	var src strings.Builder
-	src.WriteString("package main\n\n")
+	src.WriteString("main = ma\n")
 	for i := range 400 {
-		src.WriteString("func f")
-		src.WriteString(strconv.Itoa(i))
-		src.WriteString("() {}\n")
+		src.WriteString("map")
+		src.WriteString(strings.Repeat("x", i%5))
+		src.WriteString(" a = a\n")
 	}
-	src.WriteString("func bad() {\n")
-	text := src.String()
-
-	makeApp := func() *appState {
-		app := &appState{syntaxCheck: newGoSyntaxChecker()}
-		app.initBuffers(editor.NewEditor(text))
-		app.currentPath = "bench.md"
-		app.buffers[0].path = "bench.md"
-		app.buffers[0].mode = syntaxMarkdown
-		return app
+	buf := []rune(src.String())
+	app := &appState{}
+	app.initBuffers(editor.NewEditor(string(buf)))
+	app.currentPath = "bench.m"
+	app.buffers[0].path = app.currentPath
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = mirandaCompletionItems(app, buf, "ma")
 	}
-
-	b.Run("hit", func(b *testing.B) {
-		app := makeApp()
-		_, _ = activeBufferSyntaxErrors(app, syntaxMarkdown, app.currentPath)
-		b.ReportAllocs()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, _ = activeBufferSyntaxErrors(app, syntaxMarkdown, app.currentPath)
-		}
-	})
-
-	b.Run("miss", func(b *testing.B) {
-		app := makeApp()
-		b.ReportAllocs()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			app.touchActiveBufferText()
-			_, _ = activeBufferSyntaxErrors(app, syntaxMarkdown, app.currentPath)
-		}
-	})
 }

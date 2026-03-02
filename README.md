@@ -7,9 +7,11 @@ Mica (Miranda Cat) is a terminal-first text editor with Canon Cat inspired navig
 ```sh
 go build -o mica .
 ./mica [file1 file2 ...]
+./mica +13 test.m
 ```
 
 - Missing startup files open as empty buffers and are created on first save.
+- `+<line>` before a file path opens that file and places the caret on the 1-based line number.
 - `Shift+Tab` cycles buffers.
 
 ## Core Shortcuts
@@ -22,8 +24,9 @@ go build -o mica .
 - `Ctrl+Q`: close current buffer
 - `Esc+Shift+Q`: quit all
 - `Esc+Esc`: close current buffer (prefix mode)
-- `Esc+M`: cycle forced language mode (`text -> markdown -> miranda -> text`)
+- `Esc+M`: cycle forced language mode (`auto/miranda -> markdown -> miranda -> auto/miranda`)
 - `Esc+I`: Miranda symbol info popup (shows function definitions from current buffer or vendored stdlib when available)
+- `Tab`: Miranda completion for keywords, builtins, current-file symbols, and vendored stdlib symbols (opens chooser when ambiguous)
 - `Esc+/`: incremental search (`/` lock, `Tab` next, `Shift+Tab` previous)
 - `Esc+X`: line-highlight mode (`x` extends)
 - `Esc+Space`: less mode (`Space` page, `Esc` exit)
@@ -39,7 +42,7 @@ go build -o mica .
 ## Syntax Modes
 
 - Auto-detect supports Markdown (`.md`, `.markdown`) and Miranda (`.m`).
-- Plain text is the default.
+- Miranda is the default mode for non-Markdown buffers.
 - `Esc+M` sets a forced mode per buffer.
 
 ## Project Layout
@@ -47,6 +50,9 @@ go build -o mica .
 - `main_tui.go`: tcell frontend loop and terminal rendering.
 - `main.go`: shared app state and non-UI helpers.
 - `input_core.go`: platform-neutral key/text command handling.
+- `miranda_highlight_common.go` + `miranda_highlight.go`: Miranda/Markdown syntax detection and lexical highlighting.
+- `miranda_symbol_info.go`: `Esc+I` symbol lookup and stdlib help extraction.
+- `miranda_completion.go` + `miranda_completion_item.go`: Miranda completion candidate assembly and popup item payload type.
 - `editor/`: headless editing core (gap-buffer-backed storage).
 - `miranda/`: vendored Miranda runtime/source tree tracked in this repository.
 

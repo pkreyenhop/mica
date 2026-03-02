@@ -9,7 +9,10 @@ Mica is a TUI editor with a headless core. It focuses on keyboard-first editing,
 ```sh
 go build -o mica .
 ./mica [file1 file2 ...]
+./mica +13 test.m
 ```
+
+`+<line>` before a file path opens the file and places the caret on that 1-based line.
 
 ## Editing and Movement
 
@@ -20,6 +23,7 @@ go build -o mica .
 - `Ctrl+K`: kill to end of line
 - `Ctrl+U`: undo
 - `Ctrl+/`: toggle comments (`//`) on selection/current line
+- `Tab`: Miranda completion for keywords, builtins, current-file symbols, and vendored stdlib symbols
 - `Ctrl+A` / `Ctrl+E`: line start/end
 - `Ctrl+Shift+A` / `Ctrl+Shift+E`: buffer start/end
 - `Ctrl+,` / `Ctrl+.`: page up/down
@@ -44,8 +48,9 @@ go build -o mica .
 - `Esc+W`: write prompt
 - `Esc+Shift+S`: save dirty buffers
 - `Esc+Shift+Q`: quit all
-- `Esc+M`: cycle forced language mode (`text -> markdown -> miranda -> text`)
+- `Esc+M`: cycle forced language mode (`auto/miranda -> markdown -> miranda -> auto/miranda`)
 - `Esc+I`: open Miranda symbol info popup with definition lookup (current buffer first, then vendored stdlib)
+- When completion popup is open: `Tab`/`Shift+Tab` (or Up/Down) move selection, `Enter` applies
 - `Esc+/`: search mode
 - `Esc+X`: line-highlight mode
 - `Esc+Space`: less mode
@@ -61,7 +66,7 @@ If `Esc` remains pending briefly, a lower-right helper popup shows available nex
 
 ## Syntax Modes
 
-- Auto detect: Markdown (`.md`, `.markdown`), Miranda (`.m`), else text.
+- Auto detect: Markdown (`.md`, `.markdown`), otherwise Miranda.
 - Forced mode cycle with `Esc+M`.
 
 ## Rendering

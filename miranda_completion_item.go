@@ -1,7 +1,7 @@
 package main
 
 // completionItem remains as a UI payload type for the completion popup.
-// LSP/gopls integration has been removed.
+// Legacy LSP integration has been removed.
 type completionItem struct {
 	Label  string
 	Insert string

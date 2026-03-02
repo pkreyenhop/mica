@@ -17,14 +17,17 @@ package main // import "."
 
 - `Esc` command-prefix mode with delayed lower-right helper popup.
 - `Esc+I` symbol info popup for Miranda symbols and function definitions.
+- `Tab` completion in Miranda buffers for keywords, builtins, current-file symbols, and vendored stdlib symbols.
 - `Esc+/` incremental search mode (`/` lock, `Tab`/`Shift+Tab` navigation).
 - `Esc+X` line-highlight mode (`x` extends selection, `Esc` exits).
 - `Esc+Space` less mode (`Space` page, `Esc` exit).
+- Startup CLI accepts `+<line>` before a file path to place caret at that 1-based line.
 
 ### Syntax Highlighting
 
 - Syntax highlighting uses built-in lexical tokenizers (no LSP/Tree-sitter dependency).
-- Active syntax kinds: text (default), markdown, miranda.
+- Active syntax kinds: miranda (default), markdown.
+- Implementation files: `miranda_highlight_common.go`, `miranda_highlight.go`.
 
 ## `mica/editor`
 

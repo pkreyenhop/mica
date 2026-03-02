@@ -4,14 +4,12 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"go/parser"
-	"go/token"
 	"io"
 	"os"
 	"os/exec"
-	pathpkg "path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -45,6 +43,9 @@ type bufferSlot struct {
 	syntaxErrMode    syntaxKind
 	syntaxErrLines   map[int]struct{}
 	syntaxErrMsgs    map[int]string
+	// Per-buffer cached Miranda completion definitions keyed by textRev.
+	completionDefsTextRev int
+	completionDefs        map[string]string
 }
 
 type renderCache struct {
@@ -78,8 +79,6 @@ type appState struct {
 	symbolInfoPopup  string
 	symbolInfoScroll int
 	syntaxHL         *syntaxHighlighter
-	syntaxCheck      *goSyntaxChecker
-	noGopls          bool
 	clipboard        editor.Clipboard
 	cmdPrefixActive  bool
 	suppressTextOnce bool
@@ -145,6 +144,7 @@ var helpEntries = []helpEntry{
 	{"Kill to EOL", "Ctrl+K"},
 	{"Copy / Cut / Paste", "Ctrl+C / Ctrl+X / Ctrl+V"},
 	{"Symbol info under cursor (Miranda)", "Esc+I"},
+	{"Tab completion (Miranda)", "Tab expands keyword/local/stdlib symbol; popup on ambiguity"},
 	{"Cycle language mode", "Esc+M"},
 	{"Search mode", "Esc+/ then type pattern; / locks; Tab/Shift+Tab navigate; x enters line highlight mode"},
 	{"Line highlight mode", "Esc+X (or x from locked search), then x to extend by line; Esc exits"},
@@ -159,6 +159,11 @@ type openPrompt struct {
 	Active  bool
 	Query   string
 	Matches []string
+}
+
+type startupTarget struct {
+	path string
+	line int
 }
 
 func (app *appState) initBuffers(ed *editor.Editor) {
@@ -335,11 +340,8 @@ func saveAll(app *appState) error {
 	return nil
 }
 
-var runFmtFix = goFmtAndFix
-var startGoRun = startGoRunProcess
-var completeGoCompletions = func(app *appState, path string, content string, line int, col int) ([]completionItem, error) {
-	return nil, fmt.Errorf("completion backend disabled")
-}
+var runFmtFix = mirandaFmtAndFix
+var startMirandaRun = startMirandaRunProcess
 
 func formatFixReloadCurrent(app *appState) error {
 	if app == nil || app.ed == nil || len(app.buffers) == 0 {
@@ -400,10 +402,10 @@ func runCurrentPackage(app *appState) error {
 		}
 		appendOut("\n[exit] ok\n")
 	}
-	return startGoRun(dir, appendOut, onDone)
+	return startMirandaRun(dir, appendOut, onDone)
 }
 
-func startGoRunProcess(dir string, onOut func(string), onDone func(error)) error {
+func startMirandaRunProcess(dir string, onOut func(string), onDone func(error)) error {
 	if strings.TrimSpace(dir) == "" {
 		return fmt.Errorf("no run directory")
 	}
@@ -451,7 +453,7 @@ func appendRunOutput(ed *editor.Editor, s string) {
 	ed.Caret = ed.RuneLen()
 }
 
-func goFmtAndFix(path string) error {
+func mirandaFmtAndFix(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("no file path")
 	}
@@ -736,15 +738,15 @@ func pickerLines(root string, limit int) ([]string, error) {
 	return entries, nil
 }
 
-func loadStartupFiles(app *appState, args []string) {
+func loadStartupFiles(app *appState, targets []startupTarget) {
 	if app == nil {
 		return
 	}
-	for i, arg := range args {
+	for i, target := range targets {
 		if i > 0 {
 			app.addBuffer()
 		}
-		abs, err := filepath.Abs(arg)
+		abs, err := filepath.Abs(target.path)
 		if err != nil {
 			app.lastEvent = fmt.Sprintf("OPEN ERR: %v", err)
 			continue
@@ -756,6 +758,7 @@ func loadStartupFiles(app *appState, args []string) {
 			app.ed.SetRunes(nil)
 			app.buffers[app.bufIdx].dirty = false
 			app.touchActiveBufferText()
+			applyStartupLine(app, target.line)
 			app.lastEvent = fmt.Sprintf("Buffer for %s (file will be created on save)", abs)
 			continue
 		}
@@ -763,25 +766,84 @@ func loadStartupFiles(app *appState, args []string) {
 			app.lastEvent = fmt.Sprintf("OPEN ERR: %v", err)
 			continue
 		}
+		applyStartupLine(app, target.line)
 		app.lastEvent = fmt.Sprintf("Opened %s", app.currentPath)
 	}
 }
 
-func filterArgsToFiles(args []string) []string {
-	out := make([]string, 0, len(args))
+func parseStartupTargets(args []string) []startupTarget {
+	out := make([]startupTarget, 0, len(args))
+	pendingLine := 0
 	for _, a := range args {
+		// A +N argument applies to the next startup file path only.
+		if line, ok := parseStartupLineArg(a); ok {
+			pendingLine = line
+			continue
+		}
 		info, err := os.Stat(a)
 		if err == nil {
 			if info.Mode().IsRegular() {
-				out = append(out, a)
+				out = append(out, startupTarget{path: a, line: pendingLine})
+				pendingLine = 0
 			}
 			continue
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			out = append(out, a)
+			out = append(out, startupTarget{path: a, line: pendingLine})
+			pendingLine = 0
 		}
 	}
 	return out
+}
+
+func parseStartupLineArg(arg string) (int, bool) {
+	if !strings.HasPrefix(arg, "+") || len(arg) < 2 {
+		return 0, false
+	}
+	for _, r := range arg[1:] {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	line, err := strconv.Atoi(arg[1:])
+	if err != nil || line < 1 {
+		return 0, false
+	}
+	return line, true
+}
+
+func applyStartupLine(app *appState, line int) {
+	if app == nil || app.ed == nil {
+		return
+	}
+	buf := app.ed.Runes()
+	if len(buf) == 0 || line <= 1 {
+		app.ed.Caret = 0
+		return
+	}
+	app.ed.Caret = lineStartPos1Based(buf, line)
+	app.ed.Sel.Active = false
+}
+
+// lineStartPos1Based returns the rune index for the start of a 1-based line.
+// If line exceeds the buffer line count, it returns the start of the last line.
+func lineStartPos1Based(buf []rune, line int) int {
+	if len(buf) == 0 || line <= 1 {
+		return 0
+	}
+	curLine := 1
+	lastLineStart := 0
+	for i, r := range buf {
+		if r != '\n' {
+			continue
+		}
+		lastLineStart = i + 1
+		curLine++
+		if curLine == line {
+			return lastLineStart
+		}
+	}
+	return lastLineStart
 }
 
 func bufferLabel(app *appState) string {
@@ -957,7 +1019,7 @@ func syntaxKindLabel(kind syntaxKind) string {
 	case syntaxMiranda:
 		return "miranda"
 	default:
-		return "text"
+		return "miranda"
 	}
 }
 
@@ -993,76 +1055,41 @@ func cycleBufferMode(app *appState) string {
 }
 
 func tryManualCompletion(app *appState) bool {
-	return false
-}
-
-func tryImportedPackageNameExpansion(app *appState, buf []rune) bool {
-	prefixStart := identPrefixStart(buf, app.ed.Caret)
-	prefix := string(buf[prefixStart:app.ed.Caret])
-	if len(prefix) < 1 {
+	if app == nil || app.ed == nil {
 		return false
 	}
-	names := importedPackageNames(string(buf))
-	match := ""
-	for _, name := range names {
-		if strings.HasPrefix(name, prefix) {
-			if match != "" {
-				return false
-			}
-			match = name
-		}
-	}
-	if match == "" || match == prefix {
+	buf := app.ed.Runes()
+	// Tab expansion is Miranda-specific in this editor build.
+	if bufferSyntaxKind(app, app.currentPath, buf) != syntaxMiranda {
 		return false
 	}
-	applyCompletionText(app, prefixStart, match)
-	return true
-}
-
-func selectorCompletionPrefix(buf []rune, caret int) (prefix string, start int, end int, ok bool) {
-	if caret < 0 || caret > len(buf) {
-		return "", 0, 0, false
-	}
-	end = caret
-	start = caret
-	for start > 0 && isSimpleIdentRune(buf[start-1]) {
-		start--
-	}
-	if start == 0 || buf[start-1] != '.' {
-		return "", 0, 0, false
-	}
-	pkgEnd := start - 1
-	pkgStart := pkgEnd
-	for pkgStart > 0 && isSimpleIdentRune(buf[pkgStart-1]) {
-		pkgStart--
-	}
-	if pkgStart == pkgEnd {
-		return "", 0, 0, false
-	}
-	return string(buf[pkgStart:caret]), start, end, true
-}
-
-func trySelectorCompletionPopup(app *appState, buf []rune, prefix string, start int, end int) bool {
-	lines := editor.SplitLines(buf)
-	line := editor.CaretLineAt(lines, app.ed.Caret)
-	col := editor.CaretColAt(lines, app.ed.Caret)
-	if line < 0 || col < 0 {
+	start := mirandaIdentPrefixStart(buf, app.ed.Caret)
+	prefix := string(buf[start:app.ed.Caret])
+	if strings.TrimSpace(prefix) == "" {
 		return false
 	}
-	items := []completionItem(nil)
-	if !app.noGopls {
-		got, err := completeGoCompletions(app, app.currentPath, string(buf), line, col)
-		if err != nil {
-			app.noGopls = true
-			app.lastEvent = "Autocomplete disabled"
-			return false
-		}
-		items = got
-	}
+	items := mirandaCompletionItems(app, buf, prefix)
 	if len(items) == 0 {
 		return false
 	}
-	openCompletionPopup(app, "Completions for "+prefix, items, start, end)
+	if len(items) == 1 {
+		insert := items[0].Insert
+		if insert == "" {
+			insert = items[0].Label
+		}
+		if insert == prefix {
+			return false
+		}
+		applyCompletionText(app, start, insert)
+		return true
+	}
+	// Expand to shared prefix when safe; otherwise show interactive chooser.
+	lcp := longestSharedPrefix(items)
+	if len(lcp) > len(prefix) {
+		applyCompletionText(app, start, lcp)
+		return true
+	}
+	openCompletionPopup(app, "Miranda completions for "+prefix, items, start, app.ed.Caret)
 	return true
 }
 
@@ -1165,55 +1192,6 @@ func completionPopupDetailText(item completionItem) string {
 	return out
 }
 
-func importedPackageNames(src string) []string {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "", src, parser.ImportsOnly)
-	if err != nil || file == nil {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(file.Imports))
-	for _, imp := range file.Imports {
-		if imp == nil || imp.Path == nil {
-			continue
-		}
-		name := ""
-		if imp.Name != nil {
-			name = strings.TrimSpace(imp.Name.Name)
-			if name == "_" || name == "." {
-				continue
-			}
-		}
-		if name == "" {
-			p := strings.Trim(imp.Path.Value, "\"")
-			name = pathpkg.Base(p)
-		}
-		if name == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func isSimpleIdentRune(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
-}
-
-func identPrefixStart(buf []rune, caret int) int {
-	caret = clamp(caret, 0, len(buf))
-	start := caret
-	for start > 0 && isSimpleIdentRune(buf[start-1]) {
-		start--
-	}
-	return start
-}
-
 func applyCompletionText(app *appState, prefixStart int, insertText string) {
 	insert := []rune(insertText)
 	cur := app.ed.Runes()
@@ -1224,68 +1202,6 @@ func applyCompletionText(app *appState, prefixStart int, insertText string) {
 	app.ed.SetRunes(next)
 	app.ed.Caret = prefixStart + len(insert)
 	app.markDirty()
-}
-
-func extremelySureCompletion(prefix string, items []completionItem, minPrefix int) (completionItem, bool) {
-	if len(items) != 1 || len(prefix) < minPrefix {
-		return completionItem{}, false
-	}
-	item := items[0]
-	insert := item.Insert
-	if insert == "" {
-		insert = item.Label
-	}
-	if len(insert) <= len(prefix) {
-		return completionItem{}, false
-	}
-	if !strings.HasPrefix(insert, prefix) {
-		if strings.HasPrefix(item.Label, prefix) && isSimpleIdent(item.Label) {
-			item.Insert = item.Label
-			return item, true
-		}
-		return completionItem{}, false
-	}
-	if !isSimpleIdent(insert) {
-		if strings.HasPrefix(item.Label, prefix) && isSimpleIdent(item.Label) {
-			item.Insert = item.Label
-			return item, true
-		}
-		return completionItem{}, false
-	}
-	item.Insert = insert
-	return item, true
-}
-
-func isSimpleIdent(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func goKeywordFallback(prefix string) (string, bool) {
-	if prefix == "" {
-		return "", false
-	}
-	match := ""
-	for kw := range goCompletionKeywords {
-		if strings.HasPrefix(kw, prefix) {
-			if match != "" {
-				return "", false
-			}
-			match = kw
-		}
-	}
-	if match == "" {
-		return "", false
-	}
-	return match, true
 }
 
 func visualColForRuneCol(line string, runeCol, width int) int {

@@ -26,15 +26,13 @@ const (
 )
 
 type syntaxHighlighter struct {
-	lastPath   string
-	lastSource string
-	lastLines  int
-	lastKind   syntaxKind
-	lineStyles [][]tokenStyle
+	lastPath    string
+	lastTextRev int
+	lastKind    syntaxKind
+	lineStyles  [][]tokenStyle
 }
 
-func newGoHighlighter() *syntaxHighlighter {
-	// Historical constructor name kept to avoid broad call-site churn.
+func newMirandaHighlighter() *syntaxHighlighter {
 	// The implementation now uses built-in lexical highlighters (no LSP/Tree-sitter).
 	return &syntaxHighlighter{}
 }
@@ -56,7 +54,7 @@ func detectSyntax(path, src string) syntaxKind {
 		if strings.HasPrefix(trimmed, "# ") || strings.HasPrefix(trimmed, "## ") {
 			return syntaxMarkdown
 		}
-		return syntaxNone
+		return syntaxMiranda
 	}
-	return syntaxNone
+	return syntaxMiranda
 }

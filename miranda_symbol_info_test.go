@@ -43,3 +43,19 @@ func TestShowSymbolInfoShowsStdlibDefinition(t *testing.T) {
 		t.Fatalf("expected map definition in popup, got:\n%s", got)
 	}
 }
+
+func TestShowSymbolInfoShowsStdlibDefinitionReverse(t *testing.T) {
+	src := "reverse"
+	app := appState{}
+	app.initBuffers(editor.NewEditor(src))
+	app.buffers[0].mode = syntaxMiranda
+	app.ed.Caret = 1
+
+	got := showSymbolInfo(&app)
+	if !strings.Contains(got, "miranda/miralib/stdenv.m") {
+		t.Fatalf("expected stdenv source path in popup, got:\n%s", got)
+	}
+	if !strings.Contains(strings.ToLower(got), "reverse") {
+		t.Fatalf("expected reverse definition in popup, got:\n%s", got)
+	}
+}

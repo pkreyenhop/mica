@@ -116,7 +116,7 @@ func TestSaveCurrentDefaultsToLeapTxt(t *testing.T) {
 	}
 }
 
-func TestFilterArgsToFilesSkipsDirs(t *testing.T) {
+func TestParseStartupTargetsSkipsDirs(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "a.txt")
 	dir := filepath.Join(root, "dir")
@@ -126,9 +126,9 @@ func TestFilterArgsToFilesSkipsDirs(t *testing.T) {
 	if err := os.Mkdir(dir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	got := filterArgsToFiles([]string{file, dir})
-	if len(got) != 1 || got[0] != file {
-		t.Fatalf("filterArgsToFiles got %v", got)
+	got := parseStartupTargets([]string{file, dir})
+	if len(got) != 1 || got[0].path != file || got[0].line != 0 {
+		t.Fatalf("parseStartupTargets got %#v", got)
 	}
 }
 
@@ -139,7 +139,7 @@ func TestLoadStartupFilesCreatesMissing(t *testing.T) {
 	app := &appState{openRoot: root}
 	app.initBuffers(editor.NewEditor(""))
 
-	loadStartupFiles(app, []string{target})
+	loadStartupFiles(app, []startupTarget{{path: target}})
 
 	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected file to not exist until saved, err=%v", err)
@@ -157,6 +157,51 @@ func TestLoadStartupFilesCreatesMissing(t *testing.T) {
 	}
 	if data, err := os.ReadFile(target); err != nil || string(data) != "" {
 		t.Fatalf("expected empty file after save, got %q err=%v", string(data), err)
+	}
+}
+
+func TestParseStartupTargetsCapturesLinePrefix(t *testing.T) {
+	got := parseStartupTargets([]string{"+13", "test.m"})
+	if len(got) != 1 {
+		t.Fatalf("targets length = %d, want 1", len(got))
+	}
+	if got[0].path != "test.m" || got[0].line != 13 {
+		t.Fatalf("target = %#v, want path test.m line 13", got[0])
+	}
+}
+
+func TestLoadStartupFilesAppliesLine(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "test.m")
+	content := "one\ntwo\nthree\nfour\n"
+	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	app := &appState{openRoot: root}
+	app.initBuffers(editor.NewEditor(""))
+
+	loadStartupFiles(app, []startupTarget{{path: target, line: 3}})
+
+	lines := editor.SplitLines(app.ed.Runes())
+	if got := editor.CaretLineAt(lines, app.ed.Caret); got != 2 {
+		t.Fatalf("caret line = %d, want 2", got)
+	}
+}
+
+func TestLineStartPos1Based(t *testing.T) {
+	buf := []rune("one\ntwo\nthree\n")
+	if got := lineStartPos1Based(buf, 1); got != 0 {
+		t.Fatalf("line 1 start = %d, want 0", got)
+	}
+	if got := lineStartPos1Based(buf, 2); got != 4 {
+		t.Fatalf("line 2 start = %d, want 4", got)
+	}
+	if got := lineStartPos1Based(buf, 3); got != 8 {
+		t.Fatalf("line 3 start = %d, want 8", got)
+	}
+	if got := lineStartPos1Based(buf, 99); got != 14 {
+		t.Fatalf("line 99 start = %d, want last-line start 14", got)
 	}
 }
 

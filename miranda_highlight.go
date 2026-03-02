@@ -17,11 +17,11 @@ var mirandaBuiltins = map[string]struct{}{
 	"zip": {}, "zip2": {}, "take": {}, "drop": {}, "member": {}, "reverse": {},
 }
 
-func (h *syntaxHighlighter) lineStyleForKind(path, src string, lines []string, kind syntaxKind) [][]tokenStyle {
+func (h *syntaxHighlighter) lineStyleForKind(path string, textRev int, lines []string, kind syntaxKind) [][]tokenStyle {
 	if h == nil || len(lines) == 0 || kind == syntaxNone {
 		return nil
 	}
-	if h.lastPath == path && h.lastSource == src && h.lastLines == len(lines) && h.lastKind == kind {
+	if h.lastPath == path && h.lastTextRev == textRev && h.lastKind == kind {
 		return h.lineStyles
 	}
 
@@ -36,8 +36,7 @@ func (h *syntaxHighlighter) lineStyleForKind(path, src string, lines []string, k
 	}
 
 	h.lastPath = path
-	h.lastSource = src
-	h.lastLines = len(lines)
+	h.lastTextRev = textRev
 	h.lastKind = kind
 	h.lineStyles = out
 	return out

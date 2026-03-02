@@ -5,6 +5,9 @@
 - `main_tui.go` — TUI frontend (tcell): screen setup, event loop, rendering, and key dispatch.
 - `main.go` — shared app state and non-UI helpers.
 - `input_core.go` — platform-agnostic input/controller layer.
+- `miranda_highlight_common.go` / `miranda_highlight.go` — syntax kind detection + lexical highlighting.
+- `miranda_symbol_info.go` — Miranda symbol definition/help popup logic.
+- `miranda_completion.go` / `miranda_completion_item.go` — Miranda completion candidate plumbing + popup item payload.
 - `editor/` — UI-free core: buffer management, leap/search, selection, clipboard abstraction.
 - Root tests: `main_open_test.go`, `main_buffer_test.go`, `main_scroll_test.go`, `main_syntax_test.go`, `main_tui_test.go`, `main_help_test.go`.
 - `RULES.md` — canonical behavior list.
@@ -16,6 +19,7 @@
 - `go build .` — compile the editor.
 - `go test ./editor` — run headless logic tests.
 - `go test ./...` — run full tests.
+- Startup accepts `+<line>` before a file path (example: `mica +13 test.m`) and moves caret to that 1-based line.
 
 ## Coding Style & Naming Conventions
 - Run `gofmt` before sending changes.
@@ -24,7 +28,8 @@
 - Use `[]rune` for buffer text.
 - Prefer editor accessors (`Runes`, `String`, `RuneLen`, `SetRunes`) over direct storage mutation.
 - Keep `helpEntries`, README, and RULES aligned.
-- Esc-prefixed command shortcuts include `Esc+I` for Miranda symbol-definition popup, `Esc+M` for mode cycle (`text/markdown/miranda`), and `Esc+Shift+Delete` for buffer clear.
+- Esc-prefixed command shortcuts include `Esc+I` for Miranda symbol-definition popup, `Esc+M` for mode cycle (`auto/miranda -> markdown -> miranda`), and `Esc+Shift+Delete` for buffer clear.
+- `Tab` completion in Miranda buffers expands symbols from keywords/builtins, current file definitions, and vendored stdlib definitions.
 
 ## Testing Guidelines
 - Prefer scenario-style behavior tests.

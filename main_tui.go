@@ -56,7 +56,7 @@ func runTUI() error {
 	app := appState{
 		blinkAt:      time.Now(),
 		openRoot:     root,
-		syntaxHL:     newGoHighlighter(),
+		syntaxHL:     newMirandaHighlighter(),
 		clipboard:    clip,
 		startupFast:  true,
 		escHelpDelay: 700 * time.Millisecond,
@@ -67,7 +67,7 @@ func runTUI() error {
 	app.initBuffers(ed)
 
 	if len(os.Args) > 1 {
-		loadStartupFiles(&app, filterArgsToFiles(os.Args[1:]))
+		loadStartupFiles(&app, parseStartupTargets(os.Args[1:]))
 	}
 
 	for {
@@ -651,8 +651,7 @@ func renderData(app *appState) ([]string, [][]tokenStyle, string, []int) {
 		langMode := syntaxKindLabel(kind)
 		return lines, nil, langMode, nil
 	}
-	src := string(buf)
-	lineStyles := app.syntaxHL.lineStyleForKind(path, src, lines, kind)
+	lineStyles := app.syntaxHL.lineStyleForKind(path, textRev, lines, kind)
 	langMode := syntaxKindLabel(kind)
 	if slot != nil {
 		slot.cachedTextRev = textRev
